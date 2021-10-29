@@ -8,19 +8,26 @@ import csv
 import os
 
 # Global Variables 
-depth = 0 # Stores highest indent-#
+depth = 0 # Stores highest indent-#, which will help determine the total # columns
 level_names = []
 level_text = []
 global_list_row_obj = None # Only used for descendant-text
 
 # Change base_path to match path to the folder holding the html file
-base_path = '/Users/Ruairi/Cook County Government/Data - States Attorney - Documents/Codifying Illinois Law/production/Final Process (Ruairi)'
-path_law_book_html = os.path.join(base_path, 'wholebook.html')
+base_path = '/Users/Ruairi/Documents/Fall 2021/Codifying Illinois Law'
+path_law_book_html = os.path.join(base_path, 'wholebook_2020.html')
 
 # Part 1: Read in html and construct a list of html rows we care about
-#
-# 3 functions to update global variables, read in data, and identify important 
-# tags
+# [3 functions to update global vars, read in data, and identify important tags]
+def read_in_data(filename):
+    """
+    Input: Filepath for html
+    Output: Soup object of parsed html
+    Description: Function to read in data and output parsed soup object
+    """
+    with open(filename, 'r', encoding='utf-8') as f:
+        contents = f.read()
+    return BeautifulSoup(contents, "xml")
 
 def indent_depth(html_rows):
     """
@@ -39,25 +46,15 @@ def indent_depth(html_rows):
     level_names = ["Level-" + str(num+1) for num in range(depth)]
     global level_text
     level_text = ["Level-" + str(num+1) + "-text" for num in range(depth)]
-    #Need to add depth to RowObject.py class global var
+    # Need to add depth to RowObject.py class global var
     temp = RowObject("Temp","Indent-X") 
     temp.depth= depth
-    
-def read_in_data(filename):
-    """
-    Input: Filepath for html
-    Output: Soup object of parsed html
-    Description: Function to read in data and output parsed soup object
-    """
-    with open(filename, 'r', encoding='utf-8') as f:
-        contents = f.read()
-    return BeautifulSoup(contents, "xml")
     
 def tags_of_interest(filename=path_law_book_html, year=2020):
     """
     Input: Law book year (default 2020), html file (default path_law_book_html)
-    Output: Cleaned list of html for all rows of interest
-    
+    Output: Cleaned list of html rows for all rows of interest
+    Description:
     1) Uses the read_in_data function to make a list of all relevant
     html tags (still using HTML tags, nothing is RowObject yet).
     2) Makes some hard code corrections to the 'class' label for obvious errors
@@ -90,7 +87,7 @@ def tags_of_interest(filename=path_law_book_html, year=2020):
                 item['class'] = "INDENT-2"
 
     else:
-        #Insert hardcode fixes to indentation (class) tag errors
+        #Insert hardcode to fix indentation (class) tag errors for future years
         pass
 
     #STEP 3: Re-Loop through to Filter out essential tags
@@ -101,15 +98,15 @@ def tags_of_interest(filename=path_law_book_html, year=2020):
     There's a few indent's we don't need I found manually(tempForbidden)
     And History tags are a little weird
     """
-    tempForbidden = ["INDENT-1-ALIGN-RIGHT", "INDENT-1c",
-                     "INDENT-c", "INDENT_S", "INDENT-2-top"] # Excluded classes
+    tempForbidden = ["INDENT-1-ALIGN-RIGHT", "INDENT-1c", "INDENT-c",
+                     "INDENT_S", "INDENT-2-top"] # Excluded these rare classes
     importantHtmlRows = [] ## Holds important rows in html format -- will turn into rowObjects 
     for i in range(0, len(p_tags)):
         currentClass = p_tags[i].attrs.get('class')
         if(currentClass == "SECMAIN"):
             if("ILCS" in p_tags[i].getText() or "Rule" in p_tags[i].getText()):
                 importantHtmlRows.append(p_tags[i])
-        elif(p_tags[i-1].attrs.get('class') == "HISTORY"): #These are weird
+        elif(p_tags[i-1].attrs.get('class') == "HISTORY"): #HTML History tags are weird
             p_tags[i]['class'] = "HISTORY"
             importantHtmlRows.append(p_tags[i])
         elif(currentClass.startswith("INDENT") or currentClass == "SOURCE"):
@@ -123,9 +120,7 @@ def tags_of_interest(filename=path_law_book_html, year=2020):
     return importantHtmlRows  
 
 # Part 2: Turn HTML rows into RowObjects
-#
-# 4 helper functions
-# rowobjectify is main function
+# [4 helper functions; rowobjectify is main function]
 
 def identify_text_body(text):
     """
@@ -362,16 +357,16 @@ def row_objectify(list_html_objects):
     global_list_row_obj = listRowObjects
     return listRowObjects
 
-#######################################################################
-## PART 3: Use the master list of RowObjects to construct a CSV #######
-#######################################################################
+# Part 3: Use the master list of RowObjects to construct a CSV 
 
 def RowObject_2_csv_row(row):
     """
     Input: A RowObject
-    Output: A dictionary with keys that are row headers and values pulled from the inputted row that will fill in the CSV row
-    Description: A helper function that helps the iterative loop below it by stripping the relevant information from the 
-    RowObject and putting it into a dictionary that is then used to write a new csv
+    Output: A dictionary with keys that are row headers and values pulled 
+    from the inputted row that will fill in the CSV row
+    Description: A helper function that helps the iterative loop below it by 
+    stripping the relevant information from the RowObject and putting it into 
+    a dictionary that is then used to write a new csv
     """   
     #I pull these down because earlier in this code I strip the html for useful information to fill in the new csv
     global depth
@@ -411,15 +406,8 @@ with open('CodifiedTable.csv', 'w', newline='') as csvfile:
     writer.writeheader()
     b = {'Index': 1} #Used for indexing the csv
     for row in listRowObjects:
-        if(row.get_level() < 10): #Before, we skipped SECMAIN rows, now we're including them as blank text (still skip source and history)
+        if(row.get_level() < 10): #We're including SECMAIN rows as blank text (still skip source and history)
             data = {**b, **RowObject_2_csv_row(row)}
             writer.writerow(data)
             b["Index"] += 1
-        
-        
-        # elif(row.get_level() == 0): #Adds in SECMAIN rows as blank rows with only Ch, Act, Sect, Title, and Desc. Text
-        #     values = [row.get_chapter(), row.get_act(),  row.get_section(), row.get_title().replace('“', '').replace('”',''), row.get_rule()] + [None]*(depth+2) + [row.get_source(), None, row.get_descendant_text(global_list_row_obj)] 
-        #     row_vals = dict(zip(fieldnames[1:], values))
-        #     data = {**b, **row_vals}
-        #     writer.writerow(data)
-        #     b["Index"] += 1
+
